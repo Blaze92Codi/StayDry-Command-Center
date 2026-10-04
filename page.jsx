@@ -8,6 +8,7 @@ export default function Page() {
   const [fieldNotes, setFieldNotes] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
 
   async function generateResponse() {
     setLoading(true);
@@ -16,7 +17,7 @@ export default function Page() {
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessCode}` },
         body: JSON.stringify({ clientName, propertyIssue, fieldNotes })
       });
 
@@ -43,6 +44,9 @@ export default function Page() {
       <section style={styles.card}>
         <h1 style={styles.title}>StayDry Command</h1>
         <p style={styles.subtitle}>Waterproofing Client Response Generator</p>
+
+        <label style={styles.label}>Staff Access Code</label>
+        <input style={styles.input} type="password" autoComplete="off" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} />
 
         <label style={styles.label}>Client Name</label>
         <input style={styles.input} value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Example: John Smith" />
