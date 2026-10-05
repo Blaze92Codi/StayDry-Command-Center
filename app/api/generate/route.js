@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { authorize, readInput, permitGeneration } from '../../../lib/security.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,14 +46,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  let body = {};
-
-  try {
-    body = await request.json();
-  } catch {
-    body = {};
-  }
-
+  const denied = authorize(request);
+  if (denied) return denied;
+  let body;
+  try { body = await readInput(request); }
+  catch (error) { return Response.json({ error: 'Invalid or oversized request.' }, { status: error.message === 'large' ? 413 : 400 }); }
+  if (!permitGeneration()) return Response.json({ error: 'Try again shortly.' }, { status: 429 });
   const prompt = buildPrompt(body);
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 
@@ -76,6 +75,7 @@ export async function POST(request) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 900,
@@ -97,7 +97,7 @@ export async function POST(request) {
         ok: true,
         source: 'fallback-anthropic-error',
         anthropicStatus: anthropicResponse.status,
-        anthropicError: data?.error?.message || 'Anthropic request failed.',
+        
         output,
         text: output,
         response: output,
@@ -120,7 +120,7 @@ export async function POST(request) {
     return NextResponse.json({
       ok: true,
       source: 'fallback-runtime-error',
-      error: error?.message || 'Runtime error handled safely.',
+      
       output,
       text: output,
       response: output,

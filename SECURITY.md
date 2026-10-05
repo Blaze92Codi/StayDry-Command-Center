@@ -1,0 +1,6 @@
+# Staff generation access
+Both generation routes require a server-side STAYDRY_STAFF_ACCESS_TOKEN of at least 32 characters. Generate a random high-entropy credential outside the repository, configure it through the hosting provider's secret settings, and distribute only to authorized staff. Staff enter the credential into the password field; it stays in component memory, is sent over HTTPS, and is never bundled into client code or written to local storage. A shared credential is an interim access boundary, not individual staff identity or audit.
+
+Missing or short configuration fails closed. Before deployment, configure the secret through an authorized production change; existing anonymous generation will no longer work. Keep API keys server-side. No live settings or deployment were changed by this PR.
+
+Requests are streamed with a 16 KiB cap, string fields are bounded, and malformed input is rejected before provider access. A per-process ten-per-minute limiter is supplemental only: it resets on restart and is not a deployment-wide spending quota. Configure a durable gateway limit/provider budget before broader distribution. Error responses do not include upstream exception messages.
