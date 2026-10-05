@@ -23,6 +23,7 @@ test('authorization and streamed validation happen before provider access', asyn
   assert.equal((await POST(req('x'.repeat(17000),token))).status,413);
   assert.equal((await POST(req('[]',token))).status,400);
   assert.equal((await POST(req('{"clientName":42}',token))).status,400);
+  for (let i=0;i<12;i++) assert.equal((await POST(req('[]',token))).status,400);
   assert.equal(calls,0);
   assert.equal((await POST(req('{"clientName":"Staff"}',token))).status,200);
   assert.equal(calls,1);
@@ -31,4 +32,19 @@ test('authorization and streamed validation happen before provider access', asyn
 test('legacy route delegates to guarded handler and browser does not embed credential',()=>{
  assert.match(readFileSync('api/generate/route.js','utf8'),/export .* from/);
  for(const p of ['app/page.jsx','page.jsx'])assert.match(readFileSync(p,'utf8'),/Bearer \$\{accessCode\}/);
+});
+
+test('health fails closed when staff access is not configured', async () => {
+ const source=readFileSync('app/api/health/route.js','utf8').replace("import { NextResponse } from 'next/server';", 'const NextResponse = Response;');
+ const { GET } = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ try {
+  delete process.env.STAYDRY_STAFF_ACCESS_TOKEN;
+  assert.equal((await GET()).status,503);
+  process.env.STAYDRY_STAFF_ACCESS_TOKEN='short';
+  assert.equal((await GET()).status,503);
+  process.env.STAYDRY_STAFF_ACCESS_TOKEN='a'.repeat(48);
+  const response=await GET();
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).staffAccessConfigured,true);
+ } finally { delete process.env.STAYDRY_STAFF_ACCESS_TOKEN; }
 });
