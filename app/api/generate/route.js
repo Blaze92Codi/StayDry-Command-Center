@@ -48,10 +48,10 @@ export async function GET() {
 export async function POST(request) {
   const denied = authorize(request);
   if (denied) return denied;
-  if (!permitGeneration()) return Response.json({ error: 'Try again shortly.' }, { status: 429 });
   let body;
   try { body = await readInput(request); }
   catch (error) { return Response.json({ error: 'Invalid or oversized request.' }, { status: error.message === 'large' ? 413 : 400 }); }
+  if (!permitGeneration()) return Response.json({ error: 'Try again shortly.' }, { status: 429 });
   const prompt = buildPrompt(body);
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 
