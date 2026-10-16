@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+const MODEL = 'local-template';
 
 function clean(value, fallback = '') {
   if (value === null || value === undefined) return fallback;
@@ -45,86 +44,11 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  let body = {};
-
-  try {
-    body = await request.json();
-  } catch {
-    body = {};
-  }
-
-  const prompt = buildPrompt(body);
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
-
-  if (!apiKey) {
-    const output = fallbackResponse(body);
-    return NextResponse.json({
-      ok: true,
-      source: 'fallback-no-api-key',
-      output,
-      text: output,
-      response: output,
-      content: output
-    });
-  }
-
-  try {
-    const anthropicResponse = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 900,
-        temperature: 0.25,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      })
-    });
-
-    const data = await anthropicResponse.json().catch(() => ({}));
-
-    if (!anthropicResponse.ok) {
-      const output = fallbackResponse(body);
-      return NextResponse.json({
-        ok: true,
-        source: 'fallback-anthropic-error',
-        anthropicStatus: anthropicResponse.status,
-        anthropicError: data?.error?.message || 'Anthropic request failed.',
-        output,
-        text: output,
-        response: output,
-        content: output
-      });
-    }
-
-    const output = clean(data?.content?.map((part) => part?.text || '').join('\n'), fallbackResponse(body));
-
-    return NextResponse.json({
-      ok: true,
-      source: 'anthropic',
-      output,
-      text: output,
-      response: output,
-      content: output
-    });
-  } catch (error) {
-    const output = fallbackResponse(body);
-    return NextResponse.json({
-      ok: true,
-      source: 'fallback-runtime-error',
-      error: error?.message || 'Runtime error handled safely.',
-      output,
-      text: output,
-      response: output,
-      content: output
-    });
-  }
+  if (process.env.PALMER_SECURITY_PAUSED === 'true') return NextResponse.json({ error: 'Draft generation paused for review.' }, { status: 503 });
+  if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Same-origin request required.' }, { status: 403 });
+  let body;
+  try { body = await request.json(); } catch { return NextResponse.json({ error: 'Valid JSON required.' }, { status: 400 }); }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || JSON.stringify(body).length > 20000) return NextResponse.json({ error: 'Invalid draft input.' }, { status: 400 });
+  const output = fallbackResponse(body);
+  return NextResponse.json({ ok: true, source: 'local-template', requiresHumanReview: true, output, text: output, response: output, content: output }, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
