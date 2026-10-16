@@ -1,0 +1,14 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source=fs.readFileSync(new URL('./app/api/generate/route.js',import.meta.url),'utf8');
+const stub=source.replace("import { NextResponse } from 'next/server';",'const NextResponse = {json:(data,init)=>Response.json(data,init)};');
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from(stub).toString('base64'));
+const request=(body,origin='https://app.example')=>new Request('https://app.example/api/generate',{method:'POST',headers:origin?{origin}:{},body});
+test('no provider or network call remains',()=>{assert.ok(!source.includes('fetch('));assert.ok(!source.includes('ANTHROPIC_API_KEY'));});
+test('draft stays local and is marked for review',async()=>{const r=await POST(request('{}'));const data=await r.json();assert.equal(r.status,200);assert.equal(data.source,'local-template');assert.equal(data.requiresHumanReview,true);});
+test('foreign origin blocked',async()=>assert.equal((await POST(request('{}','https://attacker.invalid'))).status,403));
+test('missing origin blocked',async()=>assert.equal((await POST(request('{}',null))).status,403));
+test('invalid JSON rejected',async()=>assert.equal((await POST(request('{'))).status,400));
+test('large input rejected',async()=>assert.equal((await POST(request(JSON.stringify({notes:'x'.repeat(21000)})))).status,400));
+test('pause stops before generation',async()=>{process.env.PALMER_SECURITY_PAUSED='true';try{assert.equal((await POST(request('{}'))).status,503);}finally{delete process.env.PALMER_SECURITY_PAUSED;}});
